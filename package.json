@@ -1,7 +1,7 @@
 {
   "name": "@ugursahinkaya/generic-router",
   "type": "module",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "publishConfig": {
     "registry": "https://npm.pkg.github.com"
   },
@@ -22,11 +22,14 @@
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
-      "import": "./dist/index.js"
+      "node": "./dist/index.cjs",
+      "default": "./dist/index.js",
+      "umd": "./dist/index.umd.js"
     }
   },
-  "main": "./dist/index.js",
+  "main": "./dist/index.cjs",
   "module": "./dist/index.js",
+  "browser": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "typesVersions": {
     "*": {
@@ -43,12 +46,20 @@
   "scripts": {
     "format": "prettier --write .",
     "lint": "eslint  --fix",
-    "build": "rm -rf ./dist/* && tsc -p tsconfig.build.json"
+    "build": "rollup -c"
   },
   "devDependencies": {
-    "prettier": "^3.3.2"
+    "@rollup/plugin-terser": "^0.4.4",
+    "prettier": "^3.3.2",
+    "rollup": "^4.18.0",
+    "rollup-plugin-dts": "^6.1.1",
+    "rollup-plugin-typescript2": "^0.36.0",
+    "typescript": "5.5.2"
   },
   "engines": {
     "node": "18"
+  },
+  "dependencies": {
+    "@ugursahinkaya/shared-types": "0.1.0"
   }
 }
