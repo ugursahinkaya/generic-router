@@ -1,24 +1,12 @@
-export type AnyOperation = Operation<any, any>;
-export type AnyRecord = Record<string, any>;
-export type OperationsOf<T> = T extends GenericRouter<infer O> ? O : never;
-export type Operation<TInput, TOutput> = [input: TInput, output: MaybePromise<TOutput>];
-export type MaybePromise<T> = T | Promise<T>;
-export type OperationsRecord = Record<string, (...args: any[]) => any>;
-export type OperationsMap<TMap extends OperationsRecord> = {
-  [Key in keyof TMap]: Operation<Parameters<TMap[Key]>[0], Awaited<ReturnType<TMap[Key]>>>;
-};
-export type OperationHandler<TOperation extends Operation<any, any>> = (
-  input: TOperation[0],
-  context?: Context<TOperation>
-) => TOperation[1];
-export type Context<TBody = AnyRecord, TReturn = AnyRecord> = {
-  body?: TBody;
-  callback?: TReturn;
-} & AnyRecord;
-export type Middleware<TOperations extends Record<string, AnyOperation>> = (
-  context: Context<TOperations[keyof TOperations]>,
-  middlewareContext: AnyRecord
-) => MaybePromise<Context<TOperations[keyof TOperations]>>;
+import {
+  AnyRecord,
+  Context,
+  Middleware,
+  OperationHandler,
+  OperationsMap,
+  OperationPayload,
+  OperationsRecord
+} from '@ugursahinkaya/shared-types';
 
 export class GenericRouter<TOperations extends OperationsRecord> {
   private operations = new Map<
@@ -30,63 +18,100 @@ export class GenericRouter<TOperations extends OperationsRecord> {
     context: Context<TOperations[keyof TOperations]>;
   }[] = [];
 
-  constructor(operations?: OperationsRecord) {
+  constructor(operations: TOperations) {
     if (operations) {
       this.use(operations);
     }
   }
-  use(operations: OperationsRecord) {
-    Object.entries(operations).forEach(([operationName, operation]) => {
-      this.onOperation(operationName, operation);
-    });
+  protected async callOperation<TOperationName extends keyof TOperations>(
+    operationName: TOperationName,
+    context: Context<OperationsMap<TOperations>[keyof TOperations], AnyRecord>,
+    input?: OperationsMap<TOperations>[TOperationName][0]
+  ) {
+    const operation = this.operations.get(operationName);
+
+    if (!operation) {
+      return { error: 'Operation not found' } as ReturnType<TOperations[TOperationName]>;
+    }
+    if (operation.length > 0 && !input) {
+      return { error: 'payload must be provided' } as ReturnType<TOperations[TOperationName]>;
+    }
+
+    if (context.middleware !== false) {
+      for (const middleware of this.middlewares) {
+        if (context) {
+          const contextRes = await middleware.call(context, middleware.context);
+          if (contextRes?.payload?.error) {
+            return {
+              error: contextRes.payload.error
+            } as ReturnType<TOperations[TOperationName]>;
+          }
+        }
+      }
+    }
+
+    return operation(input, context) as ReturnType<TOperations[TOperationName]>;
   }
 
+  call<TName extends keyof TOperations>(
+    operation: TName,
+    context: Context<OperationsMap<TOperations>[TName]> | undefined,
+    payload: OperationPayload<TOperations, TName>
+  ): Promise<ReturnType<TOperations[TName]>>;
+
+  call<TName extends keyof TOperations>(
+    operation: TName,
+    payload: OperationPayload<TOperations, TName>
+  ): Promise<ReturnType<TOperations[TName]>>;
+
+  call<TName extends keyof TOperations>(operation: TName): Promise<ReturnType<TOperations[TName]>>;
+
+  call<TName extends keyof TOperations>(
+    operation: TName,
+    contextOrPayload?:
+      | Context<OperationsMap<TOperations>[TName]>
+      | OperationsMap<TOperations>[TName][0],
+    payload?: OperationPayload<TOperations, TName>
+  ): Promise<ReturnType<TOperations[TName]>> {
+    if (arguments.length === 3) {
+      return this.callOperation(
+        operation,
+        contextOrPayload as Context<OperationsMap<TOperations>[keyof TOperations], AnyRecord>,
+        payload
+      );
+    } else if (arguments.length === 2) {
+      return this.callOperation(operation, {}, contextOrPayload);
+    } else {
+      return this.callOperation(operation, {});
+    }
+  }
+  use(operations: OperationsRecord) {
+    Object.entries(operations).forEach(([operationName, operation]) => {
+      if (operation) {
+        this.onOperation(operationName, operation);
+      }
+    });
+  }
   setMiddleware(
     call: Middleware<OperationsMap<TOperations>>,
     context: Context<TOperations[keyof TOperations]>
   ) {
     this.middlewares.push({ call, context });
   }
-
-  isOperationExist(operationName: string): boolean {
+  isOperationExists(operationName: string) {
     return this.operations.has(operationName);
   }
-
   operationNames() {
-    return this.operations.keys();
+    const keysArray = [];
+    for (let key of this.operations.keys()) {
+      keysArray.push(key);
+    }
+    return keysArray as string[];
   }
-
   onOperation(
     operationName: keyof TOperations,
     handler: OperationHandler<OperationsMap<TOperations>[keyof TOperations]>
   ): void {
     this.operations.set(operationName, handler);
-  }
-
-  async call<TOperationName extends keyof TOperations>(
-    operationName: TOperationName,
-    context: Context<OperationsMap<TOperations>[keyof TOperations]>,
-    input?: OperationsMap<TOperations>[TOperationName][0]
-  ): Promise<OperationsMap<TOperations>[TOperationName][1]> {
-    const operation = this.operations.get(operationName);
-
-    if (!operation) {
-      return { error: 'Operation not found' } as OperationsMap<TOperations>[TOperationName][1];
-    }
-
-    if (context.middleware !== false) {
-      for (const middleware of this.middlewares) {
-        if (context) {
-          context = await middleware.call(context, middleware.context);
-          if (context?.payload?.error) {
-            return {
-              error: context.payload.error
-            } as OperationsMap<TOperations>[TOperationName][1];
-          }
-        }
-      }
-    }
-
-    return operation(input, context) as Promise<OperationsMap<TOperations>[TOperationName][1]>;
   }
 }
