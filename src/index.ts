@@ -5,8 +5,10 @@ import {
   OperationHandler,
   OperationsMap,
   OperationPayload,
-  OperationsRecord
+  OperationsRecord,
+  LogLevel
 } from '@ugursahinkaya/shared-types';
+import { Logger, createLogger } from '@ugursahinkaya/logger';
 
 export class GenericRouter<TOperations extends OperationsRecord> {
   private operations = new Map<
@@ -17,8 +19,10 @@ export class GenericRouter<TOperations extends OperationsRecord> {
     call: Middleware<OperationsMap<TOperations>>;
     context: Context<TOperations[keyof TOperations]>;
   }[] = [];
+  protected logger: Logger;
 
-  constructor(operations: TOperations) {
+  constructor(operations: TOperations, logLevel?: LogLevel) {
+    this.logger = createLogger('secure-auth', logLevel);
     if (operations) {
       this.use(operations);
     }
