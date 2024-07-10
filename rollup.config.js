@@ -13,7 +13,7 @@ export default [
     output: [
       {
         file: 'dist/index.node.js',
-        format: 'cjs'
+        format: 'es'
       },
       {
         file: 'dist/index.js',
